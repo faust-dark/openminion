@@ -7,6 +7,10 @@ This file tracks package-facing release notes for `openminion`.
 
 ## Unreleased
 
+- Honor `since_ts`/`until_ts` in the in-memory audit store. `MemoryAuditStore`
+  ignored the time-window filters when listing audit records; it now filters
+  by `since_ts` and `until_ts` the same way the SQLite store does (Refs #489).
+
 - Reject duplicate Handoff resolved names when an agent is built or a delegate
   family is compiled, so two handoffs resolving to the same name fail with an
   actionable message instead of a `profile_id values must be unique` error at
