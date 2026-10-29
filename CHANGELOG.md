@@ -7,6 +7,8 @@ This file tracks package-facing release notes for `openminion`.
 
 ## Unreleased
 
+- Make identity `clear_cache` prefix matching case-sensitive, so it no longer deletes other agents' snippets through a case-insensitive `LIKE`. (Refs #485)
+
 - Honor `since_ts`/`until_ts` in the in-memory audit store. `MemoryAuditStore`
   ignored the time-window filters when listing audit records; it now filters
   by `since_ts` and `until_ts` the same way the SQLite store does (Refs #489).
