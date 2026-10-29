@@ -7,6 +7,8 @@ This file tracks package-facing release notes for `openminion`.
 
 ## Unreleased
 
+- Parse porcelain v2 rename/copy records without the rename score and old-path suffix, keeping the destination path (including spaces). (Refs #491)
+
 - Honor `since_ts`/`until_ts` in the in-memory audit store. `MemoryAuditStore`
   ignored the time-window filters when listing audit records; it now filters
   by `since_ts` and `until_ts` the same way the SQLite store does (Refs #489).
