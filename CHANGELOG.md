@@ -85,6 +85,12 @@ This file tracks package-facing release notes for `openminion`.
   thread, and `AgentRunResult.thread_id` returns the turn's thread. Omitted or
   blank, it changes nothing (Refs #541).
 
+- Apply the recent-window mode budget bias (respond halving / act -120) only
+  once. The recent-window trimmer read the already-biased budget and applied
+  the mode adjustment a second time, halving the respond budget or subtracting
+  120 tokens from the act budget again; it now reads the biased budget
+  directly, so the adjustment lands exactly once (Refs #482).
+
 ## Current package line - 2026-10-29
 
 - Ask the agent's `memory.write` authorization before a turn captures memory.
