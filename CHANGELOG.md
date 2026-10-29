@@ -7,6 +7,8 @@ This file tracks package-facing release notes for `openminion`.
 
 ## Unreleased
 
+- Support positional-only parameters in `@tool` handlers, so a function with a positional-only argument no longer crashes during argument binding. (Refs #474)
+
 - Honor `since_ts`/`until_ts` in the in-memory audit store. `MemoryAuditStore`
   ignored the time-window filters when listing audit records; it now filters
   by `since_ts` and `until_ts` the same way the SQLite store does (Refs #489).
