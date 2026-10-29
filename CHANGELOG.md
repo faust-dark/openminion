@@ -7,6 +7,8 @@ This file tracks package-facing release notes for `openminion`.
 
 ## Unreleased
 
+- Expand cron day-of-week ranges before normalizing Sunday-as-7, so ranges that contain Sunday parse correctly. (Refs #488)
+
 - Honor `since_ts`/`until_ts` in the in-memory audit store. `MemoryAuditStore`
   ignored the time-window filters when listing audit records; it now filters
   by `since_ts` and `until_ts` the same way the SQLite store does (Refs #489).
