@@ -34,6 +34,21 @@ This file tracks package-facing release notes for `openminion`.
   unit it deletes at, and ignores unrelated files that merely share a digest's
   hash prefix (Refs #484).
 
+- Add a cross-machine A2A HTTP transport with mandatory token auth. The new
+  `HTTPTransport` client and stdlib `A2AHTTPServer`/`serve_a2a` server let two
+  OpenMinion machines call each other's agents over HTTP, and `a2actl serve`
+  (with `--host`/`--port`/`--token`, generating a secret when omitted) plus
+  `a2actl call --url ... --token ...` expose it from the CLI. The server binds
+  to `127.0.0.1` by default, requires a non-empty `Bearer` token on every
+  endpoint, and serves a Google-A2A-style agent card at
+  `/.well-known/agent.json`. This is an OpenMinion custom endpoint transport
+  (its `/a2a/...` endpoints speak OpenMinion's own `Envelope` JSON), not a
+  complete interoperable Google A2A protocol server; `a2actl serve` only
+  registers the built-in `agent.echo`/`agent.worker` demo agents, which do not
+  demonstrate cross-machine calls to configured application agents. Error
+  code/message/details are preserved across the wire. See
+  `docs/a2a-remote.md`.
+
 - Keep native structured-output instructions limited to formatting so research
   synthesis can answer from supplied evidence. Preserve forced `submit_output`,
   schema validation, and caller-owned routing/judgment contracts (Refs #530).
