@@ -26,6 +26,13 @@ This file tracks package-facing release notes for `openminion`.
 - Close the call-owned storage probe on every health service exit so the
   probe's storage handle is released on all exit paths (Refs #487).
 
+- Record the memory-consolidation marker only when the review resolved every
+  candidate with a terminal decision (keep/promote/discard) and nothing was
+  deferred or failed to write. A cycle that deferred any candidate, or whose
+  writes partly failed, leaves `last_consolidation_state_hash` untouched, so
+  those still-`proposed` candidates stay eligible for the next consolidation
+  cycle instead of being blocked as already consolidated (Refs #477).
+
 - Make the filesystem blob store's repeated put of the same bytes idempotent:
   `put_bytes` and `put_file` reuse the existing representation and preserve its
   first-write metadata, and `gc` evicts every owned payload of an evicted

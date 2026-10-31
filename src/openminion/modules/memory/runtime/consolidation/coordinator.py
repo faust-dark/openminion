@@ -78,6 +78,25 @@ class ConsolidationCycleResult:
     marker_result: MarkerWriteResult | None = None
 
 
+_TERMINAL_CONSOLIDATION_COUNT_KEYS = ("promoted_count", "discarded_count", "kept_count")
+
+
+def _marker_safe_to_record(write_result: dict[str, Any]) -> bool:
+    """Whether the marker may be recorded: every candidate resolved terminally.
+
+    keep/promote/discard are terminal decisions — the review of each candidate
+    is complete and must not be reprocessed next cycle, even though a kept
+    candidate stays ``proposed``. defer and failed writes (a non-empty
+    ``errors`` list) are retryable, so leave the marker unrecorded while any
+    defer or failed candidate remains and reconsider them next cycle.
+    """
+    advanced = sum(
+        int(write_result.get(key, 0) or 0) for key in _TERMINAL_CONSOLIDATION_COUNT_KEYS
+    )
+    deferred = int(write_result.get("deferred_count", 0) or 0)
+    return deferred == 0 and not write_result.get("errors") and advanced > 0
+
+
 def apply_consolidation_marker(
     working_state: Any,
     *,
@@ -205,6 +224,17 @@ def run_consolidation_cycle(
         merge_decisions=merge_decisions,
         target_scope=target_scope,
     )
+    if not _marker_safe_to_record(write_result):
+        return ConsolidationCycleResult(
+            applied=False,
+            reason_code="NOTHING_CONSOLIDATED",
+            eligibility_reason_code=eligibility.reason_code,
+            state_hash=eligibility.state_hash,
+            payload=payload,
+            merge_decisions=merge_decisions,
+            write_result=write_result,
+            marker_result=None,
+        )
     marker_result = apply_consolidation_marker(
         working_state,
         session_id=session_id,
