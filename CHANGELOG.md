@@ -11,6 +11,13 @@ This file tracks package-facing release notes for `openminion`.
   ignored the time-window filters when listing audit records; it now filters
   by `since_ts` and `until_ts` the same way the SQLite store does (Refs #489).
 
+- Add interactive session naming: `/rename <name>` sets the active session's
+  runtime name (its `name` metadata field), and `openminion --resume "<name>"`
+  (alias `-c`) resumes the session with that name, scoped to the current agent
+  and directory with most-recent duplicate ordering. This runtime name is
+  distinct from the standalone `sessctl` session `title` field, which lives in
+  a separate session store.
+
 - Reject duplicate Handoff resolved names when an agent is built or a delegate
   family is compiled, so two handoffs resolving to the same name fail with an
   actionable message instead of a `profile_id values must be unique` error at
