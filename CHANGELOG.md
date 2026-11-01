@@ -7,6 +7,11 @@ This file tracks package-facing release notes for `openminion`.
 
 ## Unreleased
 
+- Respect directory boundaries in `find`/`search` file globs: a single `*` no longer
+  crosses a separator, `**` recurses to any depth, character classes and ranges match like
+  `fnmatch` without matching `/`, and hidden, pruning and limit behaviour is unchanged
+  (Refs #492).
+
 - The agent loop's stall rule now counts consecutive failures: a productive batch clears
   the no-progress counter, so two intermittent failures spread across a turn no longer end it
   while work is still getting done (Refs #679).
