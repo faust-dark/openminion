@@ -26,6 +26,10 @@ This file tracks package-facing release notes for `openminion`.
 - Close the call-owned storage probe on every health service exit so the
   probe's storage handle is released on all exit paths (Refs #487).
 
+- Respect directory boundaries in `find`/`search` file globs: a single `*`
+  no longer crosses directories, `**` recurses to any depth, and a leading
+  `**/` matches files under any number of parent directories (Refs #492).
+
 - Make the filesystem blob store's repeated put of the same bytes idempotent:
   `put_bytes` and `put_file` reuse the existing representation and preserve its
   first-write metadata, and `gc` evicts every owned payload of an evicted
