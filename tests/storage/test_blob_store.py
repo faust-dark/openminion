@@ -223,11 +223,65 @@ def test_gc_excludes_unrelated_hash_prefix_files(tmp_path):
     os.utime(payload_dir / f"{digest}.txt", (now - 200, now - 200))
     os.utime(unrelated, (now, now))
 
-    store.gc({"max_total_bytes": 5, "dry_run": False})
+    result = store.gc({"max_total_bytes": 4, "dry_run": False})
 
     assert not (payload_dir / f"{digest}.txt").exists()
     assert unrelated.exists()
     assert not (payload_dir / f"{digest}.meta.json").exists()
+    # The unrelated prefix file is not owned, so it must not count toward the
+    # store's byte accounting either.
+    assert result["total_bytes"] == len(data)
+
+
+def test_gc_age_policy_ignores_old_unrelated_hash_prefix_file(tmp_path):
+    store = BlobStoreFS(tmp_path)
+    data = b"hello"
+    ref = store.put_bytes(data, media_type="text/plain", ext="txt")
+    digest = ref.hash
+    payload_dir = _payload_dir(tmp_path, digest)
+    unrelated = payload_dir / f"{digest}backup"
+    unrelated.write_bytes(b"yyyyy")
+
+    now = time.time()
+    os.utime(payload_dir / f"{digest}.txt", (now - 100, now - 100))
+    os.utime(unrelated, (now - 200, now - 200))
+
+    result = store.gc({"max_age_days": 0, "dry_run": False})
+
+    assert not (payload_dir / f"{digest}.txt").exists()
+    assert not (payload_dir / f"{digest}.meta.json").exists()
+    assert unrelated.exists()
+    assert str(unrelated) not in result["candidates"]
+    assert result["total_bytes"] == len(data)
+
+
+def test_gc_size_accounting_is_per_digest(tmp_path):
+    store = BlobStoreFS(tmp_path)
+    data_a = b"aaaaa"
+    data_b = b"bbbbb"
+    ref_a = store.put_bytes(data_a, media_type="text/plain", ext="txt")
+    ref_b = store.put_bytes(data_b, media_type="text/plain", ext="txt")
+    a_dir = _payload_dir(tmp_path, ref_a.hash)
+    b_dir = _payload_dir(tmp_path, ref_b.hash)
+    # A second, newer representation of A's digest.
+    (a_dir / f"{ref_a.hash}.bin").write_bytes(data_a)
+
+    now = time.time()
+    os.utime(a_dir / f"{ref_a.hash}.txt", (now - 300, now - 300))
+    os.utime(b_dir / f"{ref_b.hash}.txt", (now - 200, now - 200))
+    os.utime(a_dir / f"{ref_a.hash}.bin", (now - 100, now - 100))
+
+    result = store.gc({"max_total_bytes": 5, "dry_run": False})
+
+    # Evicting A's two representations (10 bytes) already reaches the 5-byte
+    # cap, so B must survive even though its single file sits in the middle.
+    assert not (a_dir / f"{ref_a.hash}.txt").exists()
+    assert not (a_dir / f"{ref_a.hash}.bin").exists()
+    assert not (a_dir / f"{ref_a.hash}.meta.json").exists()
+    assert (b_dir / f"{ref_b.hash}.txt").exists()
+    assert (b_dir / f"{ref_b.hash}.meta.json").exists()
+    assert result["deleted_files"] == 2
+    assert result["deleted_bytes"] == 2 * len(data_a)
 
 
 def test_put_file_repeat_preserves_first_write_metadata(tmp_path):
