@@ -16,6 +16,13 @@ This file tracks package-facing release notes for `openminion`.
   actionable message instead of a `profile_id values must be unique` error at
   registration time (Refs #476).
 
+- Resolve reasoning-effort support by the execution route actually selected.
+  The direct OpenAI/Anthropic/Groq/Cerebras/OpenRouter adapters never carry the
+  effort in their request payloads, so they no longer claim `supported=true`
+  for it; the llmctl bridge and the ollama adapter (which maps the effort to an
+  explicit `think` flag) still do, and echo is never labeled as transmitted
+  effort (Refs #481).
+
 - Close the call-owned storage probe on every health service exit so the
   probe's storage handle is released on all exit paths (Refs #487).
 
