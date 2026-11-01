@@ -428,7 +428,25 @@ class BlobStoreFS(BlobStore):
         return {hash_value: sorted(paths) for hash_value, paths in groups.items()}
 
     def _owned_payload_paths(self, hash_value: str) -> list[Path]:
-        return self._owned_payload_groups().get(hash_value, [])
+        """Owned payload siblings for one digest, scoped to its shard.
+
+        Lists only the shard directory derived from the digest's hash prefix
+        and keeps files whose stem is the digest's own valid sha256 hash,
+        excluding sidecars and unrelated hash-prefix files (e.g.
+        <digest>backup). This resolves the siblings locally instead of
+        walking the whole store on every single-digest delete.
+        """
+        shard = self.blob_root / hash_value[:2]
+        if not shard.is_dir():
+            return []
+        return sorted(
+            path
+            for path in shard.iterdir()
+            if path.is_file()
+            and not path.name.endswith(".meta.json")
+            and path.stem == hash_value
+            and _is_sha256_hash(path.stem)
+        )
 
     def _resolve_path(self, ref: BlobRef | str) -> Path:
         if isinstance(ref, BlobRef):
