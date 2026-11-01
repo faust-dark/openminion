@@ -100,6 +100,14 @@ This file tracks package-facing release notes for `openminion`.
   thread, and `AgentRunResult.thread_id` returns the turn's thread. Omitted or
   blank, it changes nothing (Refs #541).
 
+- Honour `Field` defaults and `default_factory` declared inside `Annotated`
+  (e.g. `x: Annotated[int, Field(default=5)]` or
+  `x: Annotated[list[int], Field(default_factory=list)]`) when a `@tool`
+  argument has no Python default, while still preserving `Field` defaults,
+  `default_factory`, aliases and constraints declared as the argument's Python
+  default (e.g. `x: int = Field(default=7, alias="external", ge=1)` or
+  `x: list[int] = Field(default_factory=list)`) (Refs #475).
+
 - Apply the recent-window mode budget bias (respond halving / act -120) only
   once. The recent-window trimmer read the already-biased budget and applied
   the mode adjustment a second time, halving the respond budget or subtracting
