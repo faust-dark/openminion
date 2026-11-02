@@ -107,6 +107,10 @@ This file tracks package-facing release notes for `openminion`.
   thread, and `AgentRunResult.thread_id` returns the turn's thread. Omitted or
   blank, it changes nothing (Refs #541).
 
+- Order the `memory` and `self_awareness` context segments before
+  `turn_input` so that recalled memories and the self model render ahead of
+  the final user input (Refs #483).
+
 - Honour `Field` defaults and `default_factory` declared inside `Annotated`
   (e.g. `x: Annotated[int, Field(default=5)]` or
   `x: Annotated[list[int], Field(default_factory=list)]`) when a `@tool`
