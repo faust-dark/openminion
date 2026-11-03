@@ -7,6 +7,13 @@ This file tracks package-facing release notes for `openminion`.
 
 ## Unreleased
 
+- Give the first-run missing-config error a next step: `run`, `doctor` and `tools`
+  now point at `openminion config init --provider <name>` or `--config <path>`
+  instead of printing a bare path. The message, the exit status and the stream are
+  unchanged; only an absent config gains the extra line, and a malformed or
+  unreadable config keeps its own error (Refs #573).
+
+
 ## Current package line - 2026-11-21
 
 - The file family gains `file.mkdir` and `file.copy`: `file.mkdir` creates a
