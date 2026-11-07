@@ -7,6 +7,10 @@ This file tracks package-facing release notes for `openminion`.
 
 ## Unreleased
 
+- A dropped turn-input audit write is no longer silent: the queue mutation reports the
+  failure as a bounded warning while the enqueued input still succeeds (Refs #653).
+
+
 ## Current package line - 2026-11-21
 
 - The file family gains `file.mkdir` and `file.copy`: `file.mkdir` creates a
