@@ -12,6 +12,14 @@ This file tracks package-facing release notes for `openminion`.
   inherit an old allowance (Refs #668).
 
 
+- A truncated tool result now tells the model that its output is partial: the tool
+  message carries `truncated`, `returned_length` and `total_length` when the result was
+  actually truncated, and carries nothing extra otherwise (Refs #675).
+
+
+
+
+
 
 - New storage directories are created private (0700) before any database, sidecar or
   log is written, so the 0644 files SQLite creates are not readable by other users; an
