@@ -7,6 +7,12 @@ This file tracks package-facing release notes for `openminion`.
 
 ## Unreleased
 
+- A failed usage-event read is no longer indistinguishable from an empty turn: the
+  collector returns the events it did read plus a read-failed flag, and the metadata carries
+  `llm_usage_events_incomplete` so partial totals are not reported as complete
+  (Refs #648).
+
+
 ## Current package line - 2026-11-21
 
 - The file family gains `file.mkdir` and `file.copy`: `file.mkdir` creates a
