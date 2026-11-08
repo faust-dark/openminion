@@ -275,13 +275,18 @@ def _stamp_execution_facts(
         data = result.data if isinstance(result.data, Mapping) else {}
         reason_code = str(data.get("reason_code", "") or "").upper()
         error_code = str(data.get("error_code", "") or "").lower()
-        if reason_code.startswith("POLICY_") or error_code in {
+        explicit_denial = any(
+            data.get(key) in {"policy", "budget", "policy_denied", "approval_required"}
+            for key in ("denial_source", "blocked_kind")
+        )
+        policy_error = reason_code.startswith("POLICY_") or error_code in {
             "policy_denied",
             "approval_denied",
             "confirm_required",
             "require_approval",
             "tool_exposure_denied",
-        }:
+        }
+        if explicit_denial or policy_error:
             result.state = "denied"
         else:
             result.state = "error"
