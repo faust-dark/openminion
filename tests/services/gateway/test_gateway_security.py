@@ -1,5 +1,16 @@
 from __future__ import annotations
 
+import json
+from types import SimpleNamespace
+from typing import Any
+
+from openminion.base.types import Message
+from openminion.modules.tool.base import ToolExecutionResult
+from openminion.modules.tool.sidecars import blocked_tool_result
+from openminion.services.brain.post_execution.followup import _tool_result_from_action
+from openminion.services.brain.post_execution.postprocess_metadata import (
+    _security_events_from_tool_results,
+)
 from tests.services.gateway._gateway_service_support import (
     ChannelAuthenticityConfig,
     GatewayServiceTestCase,
@@ -18,6 +29,277 @@ from tests.services.gateway._gateway_service_support import (
     sha256,
     time,
 )
+
+_SECURITY_EVENT_TYPES = frozenset(
+    {"policy_denied", "approval_required", "security_warning"}
+)
+
+
+def _bridge_payload_item(
+    result: ToolExecutionResult, *, call_id: str
+) -> dict[str, Any]:
+    """Shape a real tool result the way the brain bridge reports it."""
+    data = dict(result.data or {})
+    return _tool_result_from_action(
+        command={"tool_name": result.tool_name, "call_id": call_id},
+        action_result=SimpleNamespace(
+            status="success" if result.ok else "error",
+            outputs=data,
+            summary=str(result.content or ""),
+            error=(
+                None
+                if result.ok
+                else SimpleNamespace(
+                    code=str(data.get("error_code", "")),
+                    message=str(result.error or ""),
+                    details=dict(data.get("error_details") or {}),
+                )
+            ),
+            command_id=call_id,
+        ),
+    )
+
+
+def _ordinary_failure(code: str, *, call_id: str) -> ToolExecutionResult:
+    return ToolExecutionResult(
+        tool_name="tavily.web.search",
+        ok=False,
+        verified=False,
+        content="",
+        error=f"{code} while searching",
+        data={"error_code": code},
+        call_id=call_id,
+        source="test-stub",
+    )
+
+
+def _blocked_result(
+    *,
+    call_id: str,
+    tool_name: str,
+    reason: str,
+    code: str,
+    details: dict[str, Any],
+    event_kind: str,
+    denial_source: str,
+) -> ToolExecutionResult:
+    decision = SimpleNamespace(
+        reason=reason,
+        code=code,
+        details=details,
+        requires_confirm=event_kind == "approval_required",
+    )
+    return blocked_tool_result(
+        call=SimpleNamespace(id=call_id),
+        tool_name=tool_name,
+        decision=decision,
+        event_kind=event_kind,
+        denial_source=denial_source,
+    )
+
+
+class _ToolResultProjectionAgent:
+    """Agent stand-in exposing the real projection's metadata to the gateway."""
+
+    def __init__(self, payload: list[dict[str, Any]]) -> None:
+        self._payload = payload
+        self.metadata: dict[str, str] = {}
+
+    async def run_turn(
+        self,
+        message: Message,
+        history: list[object] | None = None,
+        **_kwargs: object,
+    ) -> Any:
+        del history, _kwargs
+        events, updates = _security_events_from_tool_results(
+            tool_results_payload=self._payload
+        )
+        self.metadata = dict(updates)
+        if events:
+            self.metadata["security_events"] = json.dumps(events, sort_keys=True)
+        return type(
+            "_Response",
+            (),
+            {
+                "text": f"reply:{message.body}",
+                "channel": message.channel,
+                "target": message.target,
+                "metadata": dict(self.metadata),
+            },
+        )()
+
+
+class GatewayServiceSecurityProjectionTests(GatewayServiceTestCase):
+    def _run_payload(
+        self, *, payload: list[dict[str, Any]], session_id: str
+    ) -> tuple[dict[str, str], list[tuple[str, dict[str, Any]]]]:
+        agent = _ToolResultProjectionAgent(payload)
+        gateway, _sink = self._build_gateway(
+            agent=agent,
+            logger_name=f"openminion.tests.projection.{session_id}",
+            agent_logger_name=f"openminion.tests.projection.agent.{session_id}",
+        )
+        asyncio.run(
+            gateway.run_once(
+                channel="console",
+                target="local-user",
+                message="run the tool",
+                session_id=session_id,
+            )
+        )
+        events = self.sessions.list_events(session_id=session_id, limit=100)
+        security = [
+            (event.event_type, event.payload)
+            for event in events
+            if event.event_type in _SECURITY_EVENT_TYPES
+        ]
+        return agent.metadata, security
+
+    def test_ordinary_tool_failures_record_no_security_event(self) -> None:
+        for index, code in enumerate(
+            ("NOT_FOUND", "TIMEOUT", "RATE_LIMITED", "UPSTREAM_ERROR", "EXEC_ERROR")
+        ):
+            with self.subTest(code=code):
+                metadata, security = self._run_payload(
+                    payload=[
+                        _bridge_payload_item(
+                            _ordinary_failure(code, call_id=f"call-{index}"),
+                            call_id=f"call-{index}",
+                        )
+                    ],
+                    session_id=f"session-ordinary-{index}",
+                )
+
+                self.assertNotIn("security_events", metadata)
+                self.assertEqual(security, [])
+
+    def test_real_policy_denial_records_policy_source_event(self) -> None:
+        result = _blocked_result(
+            call_id="call-policy",
+            tool_name="cmd.run",
+            reason="policy_denied",
+            code="POLICY_DENIED",
+            details={"policy_version": "v2", "decision": "deny"},
+            event_kind="policy_denied",
+            denial_source="policy",
+        )
+        _, security = self._run_payload(
+            payload=[
+                _bridge_payload_item(result, call_id="call-policy"),
+            ],
+            session_id="session-policy-denial",
+        )
+
+        self.assertEqual(len(security), 1)
+        self.assertEqual(security[0][1]["tool_name"], "cmd.run")
+        self.assertEqual(security[0][1]["source"], "policy")
+        self.assertEqual(security[0][1]["reason_code"], "policy_denied")
+
+    def test_real_budget_denial_records_budget_source_event(self) -> None:
+        details: dict[str, Any] = {
+            "max_budget_cost_per_run": 3,
+            "budget_cost_total": 4,
+        }
+        result = _blocked_result(
+            call_id="call-budget",
+            tool_name="weather.openmeteo.current",
+            reason="tool_budget_cost_exceeded",
+            code="tool_budget_cost_exceeded",
+            details=details,
+            event_kind="policy_denied",
+            denial_source="budget",
+        )
+        metadata, security = self._run_payload(
+            payload=[
+                _bridge_payload_item(result, call_id="call-budget"),
+            ],
+            session_id="session-budget-denial",
+        )
+
+        self.assertEqual(len(security), 1)
+        self.assertEqual(security[0][0], "policy_denied")
+        self.assertEqual(security[0][1]["source"], "budget")
+        self.assertEqual(json.loads(metadata["tool_budget"]), details)
+
+    def test_approval_forms_record_approval_required_events(self) -> None:
+        produced = [
+            _blocked_result(
+                call_id="call-approve",
+                tool_name="cmd.run",
+                reason="approval_required_high_risk",
+                code="require_approval",
+                details={"policy_version": "v1", "decision": "require_approval"},
+                event_kind="approval_required",
+                denial_source="policy",
+            ),
+            ToolExecutionResult(
+                tool_name="cmd.run",
+                ok=False,
+                verified=False,
+                content="",
+                error="confirmation required",
+                data={"error_code": "CONFIRM_REQUIRED"},
+                call_id="call-confirm",
+                source="test-stub",
+            ),
+            ToolExecutionResult(
+                tool_name="cmd.run",
+                ok=False,
+                verified=False,
+                content="",
+                error="approval required",
+                data={"error_code": "require_approval"},
+                call_id="call-legacy-approve",
+                source="test-stub",
+            ),
+        ]
+        _, security = self._run_payload(
+            payload=[
+                _bridge_payload_item(item, call_id=str(item.call_id))
+                for item in produced
+            ],
+            session_id="session-approval-forms",
+        )
+
+        self.assertEqual(len(security), 3)
+        self.assertEqual(
+            [event_type for event_type, _payload in security],
+            ["approval_required"] * 3,
+        )
+
+    def test_mixed_batch_records_only_the_real_denial(self) -> None:
+        denial = _blocked_result(
+            call_id="call-denied",
+            tool_name="cmd.run",
+            reason="policy_denied",
+            code="POLICY_DENIED",
+            details={"policy_version": "v2"},
+            event_kind="policy_denied",
+            denial_source="policy",
+        )
+        failures = [
+            _ordinary_failure("NOT_FOUND", call_id="call-a"),
+            _ordinary_failure("TIMEOUT", call_id="call-b"),
+            _ordinary_failure("UPSTREAM_ERROR", call_id="call-c"),
+        ]
+        payload = [
+            _bridge_payload_item(denial, call_id="call-denied"),
+            *[
+                _bridge_payload_item(item, call_id=str(item.call_id))
+                for item in failures
+            ],
+        ]
+        metadata, security = self._run_payload(
+            payload=payload,
+            session_id="session-mixed-batch",
+        )
+
+        self.assertEqual(len(security), 1)
+        self.assertEqual(security[0][0], "policy_denied")
+        self.assertEqual(security[0][1]["tool_name"], "cmd.run")
+        projected = json.loads(metadata["security_events"])
+        self.assertEqual(len(projected), 1)
 
 
 class GatewayServiceSecurityTests(GatewayServiceTestCase):
