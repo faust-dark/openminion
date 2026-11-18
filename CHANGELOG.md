@@ -7,6 +7,12 @@ This file tracks package-facing release notes for `openminion`.
 
 ## Unreleased
 
+- `openminion time <subcommand>` now works on the default daemon route: the API tool schema
+  lookup admits the nine registered `time.*` runtime specs (`time.now`, `time.in_zone`,
+  `time.convert`, `time.parse_iso`, `time.diff`, `time.format`, `time.start_of_day`,
+  `time.end_of_day`, `time.next_cron`) when the visible model tool `time` is present, returning
+  each live spec's own parameters; other runtime-only names stay refused (Refs #751).
+
 - The agent loop's stall rule now counts consecutive failures: a productive batch clears
   the no-progress counter, so two intermittent failures spread across a turn no longer end it
   while work is still getting done (Refs #679).
